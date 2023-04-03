@@ -18,12 +18,9 @@ import {
 } from './consts.js';
 import { getContentEntryExts } from './utils.js';
 
-function isPropagatedAsset(viteId: string, contentEntryExts: string[]): boolean {
+function isPropagatedAsset(viteId: string): boolean {
 	const url = new URL(viteId, 'file://');
-	return (
-		url.searchParams.has(PROPAGATED_ASSET_FLAG) &&
-		contentEntryExts.some((ext) => url.pathname.endsWith(ext))
-	);
+	return url.searchParams.has(PROPAGATED_ASSET_FLAG);
 }
 
 export function astroContentAssetPropagationPlugin({
@@ -44,22 +41,30 @@ export function astroContentAssetPropagationPlugin({
 			}
 		},
 		load(id) {
-			if (isPropagatedAsset(id, contentEntryExts)) {
+			if (isPropagatedAsset(id)) {
 				const basePath = id.split('?')[0];
 				const code = `
 					export async function getMod() {
 						return import(${JSON.stringify(basePath)});
 					}
+
 					export const collectedLinks = ${JSON.stringify(LINKS_PLACEHOLDER)};
 					export const collectedStyles = ${JSON.stringify(STYLES_PLACEHOLDER)};
 					export const collectedScripts = ${JSON.stringify(SCRIPTS_PLACEHOLDER)};
+					export default {
+						__astroAsset: true,
+						getMod,
+						collectedLinks,
+						collectedStyles,
+						collectedScripts,
+					}
 				`;
 				return { code };
 			}
 		},
 		async transform(code, id, options) {
 			if (!options?.ssr) return;
-			if (devModuleLoader && isPropagatedAsset(id, contentEntryExts)) {
+			if (devModuleLoader && isPropagatedAsset(id)) {
 				const basePath = id.split('?')[0];
 				if (!devModuleLoader.getModuleById(basePath)?.ssrModule) {
 					await devModuleLoader.import(basePath);
