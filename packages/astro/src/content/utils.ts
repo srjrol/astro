@@ -8,7 +8,7 @@ import { normalizePath, type ErrorPayload as ViteErrorPayload, type ViteDevServe
 import { z } from 'zod';
 import type { AstroConfig, AstroSettings } from '../@types/astro.js';
 import { AstroError, AstroErrorData } from '../core/errors/index.js';
-import { CONTENT_TYPES_FILE } from './consts.js';
+import { CONTENT_TYPES_FILE, CONTENT_FLAGS } from './consts.js';
 import { errorMap } from './error-map.js';
 import { createImage } from './runtime-assets.js';
 
@@ -343,4 +343,9 @@ function search(fs: typeof fsMod, srcDir: URL) {
 		}
 	}
 	return { exists: false, url: paths[0] };
+}
+
+export function hasContentFlag(viteId: string, flag: (typeof CONTENT_FLAGS)[number]): boolean {
+	const flags = new URLSearchParams(viteId.split('?')[1]);
+	return flags.has(flag);
 }

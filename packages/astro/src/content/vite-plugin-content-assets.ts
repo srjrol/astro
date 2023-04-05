@@ -1,4 +1,5 @@
-import { pathToFileURL } from 'url';
+import { extname } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import type { Plugin } from 'vite';
 import type { AstroSettings } from '../@types/astro.js';
 import { moduleIsTopLevelPage, walkParentInfos } from '../core/build/graph.js';
@@ -11,13 +12,15 @@ import { joinPaths, prependForwardSlash } from '../core/path.js';
 import { getStylesForURL } from '../core/render/dev/css.js';
 import { getScriptsForURL } from '../core/render/dev/scripts.js';
 import {
+	CONTENT_RENDER_FLAG,
 	LINKS_PLACEHOLDER,
 	PROPAGATED_ASSET_FLAG,
 	SCRIPTS_PLACEHOLDER,
 	STYLES_PLACEHOLDER,
 } from './consts.js';
-import { getContentEntryExts } from './utils.js';
+import { hasContentFlag } from './utils.js';
 
+// TODO: replace with `hasContentFlag`
 function isPropagatedAsset(viteId: string): boolean {
 	const url = new URL(viteId, 'file://');
 	return url.searchParams.has(PROPAGATED_ASSET_FLAG);
@@ -31,10 +34,28 @@ export function astroContentAssetPropagationPlugin({
 	settings: AstroSettings;
 }): Plugin {
 	let devModuleLoader: ModuleLoader;
-	const contentEntryExts = getContentEntryExts(settings);
 	return {
 		name: 'astro:content-asset-propagation',
 		enforce: 'pre',
+		async resolveId(id, importer, opts) {
+			if (hasContentFlag(id, CONTENT_RENDER_FLAG)) {
+				const resolvedBase = await this.resolve(id.split('?')[0], importer, {
+					skipSelf: true,
+					...opts,
+				});
+				if (!resolvedBase) return;
+				const base = resolvedBase.id;
+
+				for (const { extensions, handlePropagation } of settings.contentEntryTypes) {
+					if (handlePropagation && extensions.includes(extname(base))) {
+						return `${base}?${PROPAGATED_ASSET_FLAG}`;
+					}
+				}
+				// Resolve to the base id (no content flags)
+				// if Astro doesn't need to handle propagation.
+				return base;
+			}
+		},
 		configureServer(server) {
 			if (mode === 'dev') {
 				devModuleLoader = createViteLoader(server);
@@ -44,21 +65,19 @@ export function astroContentAssetPropagationPlugin({
 			if (isPropagatedAsset(id)) {
 				const basePath = id.split('?')[0];
 				const code = `
-					export async function getMod() {
+					function getMod() {
 						return import(${JSON.stringify(basePath)});
 					}
 
-					export const collectedLinks = ${JSON.stringify(LINKS_PLACEHOLDER)};
-					export const collectedStyles = ${JSON.stringify(STYLES_PLACEHOLDER)};
-					export const collectedScripts = ${JSON.stringify(SCRIPTS_PLACEHOLDER)};
-					export default {
-						__astroAsset: true,
-						getMod,
-						collectedLinks,
-						collectedStyles,
-						collectedScripts,
-					}
+					const collectedLinks = ${JSON.stringify(LINKS_PLACEHOLDER)};
+					const collectedStyles = ${JSON.stringify(STYLES_PLACEHOLDER)};
+					const collectedScripts = ${JSON.stringify(SCRIPTS_PLACEHOLDER)};
+
+					const defaultMod = { __astroPropagation: true, getMod, collectedLinks, collectedStyles, collectedScripts };
+					export default defaultMod;
 				`;
+				// ^ Use a default export for tools like Markdoc
+				// to catch the `__astroPropagation` identifier
 				return { code };
 			}
 		},
