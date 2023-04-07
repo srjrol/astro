@@ -143,6 +143,10 @@ export function getContentEntryExts(settings: Pick<AstroSettings, 'contentEntryT
 	return settings.contentEntryTypes.map((t) => t.extensions).flat();
 }
 
+export function getDataEntryExts(settings: Pick<AstroSettings, 'dataEntryTypes'>) {
+	return settings.dataEntryTypes.map((t) => t.extensions).flat();
+}
+
 export function getEntryCollectionName({
 	contentDir,
 	entry,
@@ -189,8 +193,9 @@ export function getContentEntryIdAndSlug({
 export function getEntryType(
 	entryPath: string,
 	paths: Pick<ContentPaths, 'config' | 'contentDir'>,
-	contentFileExts: string[]
-): 'content' | 'config' | 'ignored' | 'unsupported' {
+	contentFileExts: string[],
+	dataFileExts: string[]
+): 'content' | 'data' | 'config' | 'ignored' | 'unsupported' {
 	const { ext, base } = path.parse(entryPath);
 	const fileUrl = pathToFileURL(entryPath);
 
@@ -198,6 +203,8 @@ export function getEntryType(
 		return 'ignored';
 	} else if (contentFileExts.includes(ext)) {
 		return 'content';
+	} else if (dataFileExts.includes(ext)) {
+		return 'data';
 	} else if (fileUrl.href === paths.config.url.href) {
 		return 'config';
 	} else {

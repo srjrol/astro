@@ -19,6 +19,7 @@ import {
 	globalContentConfigObserver,
 	type ContentConfig,
 	getEntryCollectionName,
+	getDataEntryExts,
 } from './utils.js';
 
 function isContentFlagImport(viteId: string) {
@@ -54,6 +55,7 @@ export function astroContentImportPlugin({
 }): Plugin[] {
 	const contentPaths = getContentPaths(settings.config, fs);
 	const contentEntryExts = getContentEntryExts(settings);
+	const dataEntryExts = getDataEntryExts(settings);
 
 	const contentEntryExtToParser: Map<string, ContentEntryType> = new Map();
 	for (const entryType of settings.contentEntryTypes) {
@@ -91,7 +93,7 @@ export const _internal = {
 				viteServer.watcher.on('all', async (event, entry) => {
 					if (
 						CHOKIDAR_MODIFIED_EVENTS.includes(event) &&
-						getEntryType(entry, contentPaths, contentEntryExts) === 'config'
+						getEntryType(entry, contentPaths, contentEntryExts, dataEntryExts) === 'config'
 					) {
 						// Content modules depend on config, so we need to invalidate them.
 						for (const modUrl of viteServer.moduleGraph.urlToModuleMap.keys()) {
