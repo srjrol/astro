@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { PluginContext } from 'rollup';
 import { normalizePath, type ErrorPayload as ViteErrorPayload, type ViteDevServer } from 'vite';
 import { z } from 'zod';
-import type { AstroConfig, AstroSettings } from '../@types/astro.js';
+import type { AstroConfig, AstroSettings, DataEntryType } from '../@types/astro.js';
 import { AstroError, AstroErrorData } from '../core/errors/index.js';
 import { CONTENT_TYPES_FILE } from './consts.js';
 import { errorMap } from './error-map.js';
@@ -145,6 +145,16 @@ export function getContentEntryExts(settings: Pick<AstroSettings, 'contentEntryT
 
 export function getDataEntryExts(settings: Pick<AstroSettings, 'dataEntryTypes'>) {
 	return settings.dataEntryTypes.map((t) => t.extensions).flat();
+}
+
+export function getDataEntryParserByExtMap(settings: Pick<AstroSettings, 'dataEntryTypes'>) {
+	const parsers = new Map<string, DataEntryType['getEntries']>();
+	for (const entryType of settings.dataEntryTypes) {
+		for (const ext of entryType.extensions) {
+			parsers.set(ext, entryType.getEntries);
+		}
+	}
+	return parsers;
 }
 
 export function getEntryCollectionName({
