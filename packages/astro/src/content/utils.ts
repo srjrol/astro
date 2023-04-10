@@ -115,8 +115,6 @@ export async function getEntryData(
 			});
 		}
 
-		console.log(entry);
-
 		// Use `safeParseAsync` to allow async transforms
 		const parsed = await schema.safeParseAsync(entry.unvalidatedData, {
 			errorMap,
