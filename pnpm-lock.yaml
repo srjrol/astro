@@ -326,6 +326,14 @@ importers:
       unocss: 0.15.6
       vite-imagetools: 4.0.18
 
+  examples/with-data:
+    specifiers:
+      '@astrojs/markdoc': ^0.1.1
+      astro: ^2.2.0
+    dependencies:
+      '@astrojs/markdoc': link:../../packages/integrations/markdoc
+      astro: link:../../packages/astro
+
   examples/with-markdoc:
     specifiers:
       '@astrojs/markdoc': ^0.1.1
