@@ -9,7 +9,7 @@ import { normalizePath, type ErrorPayload as ViteErrorPayload, type ViteDevServe
 import { z } from 'zod';
 import type { AstroConfig, AstroSettings, DataEntryType } from '../@types/astro.js';
 import { AstroError, AstroErrorData } from '../core/errors/index.js';
-import { CONTENT_TYPES_FILE } from './consts.js';
+import { CONTENT_TYPES_FILE, CONTENT_FLAGS } from './consts.js';
 import { errorMap } from './error-map.js';
 import { createImage } from './runtime-assets.js';
 
@@ -41,11 +41,6 @@ export type CollectionConfig = z.infer<typeof collectionConfigParser>;
 export type ContentConfig = z.infer<typeof contentConfigParser>;
 
 type EntryInternal = { rawData: string | undefined; filePath: string };
-export type EntryInfo = {
-	id: string;
-	slug: string;
-	collection: string;
-};
 
 export const msg = {
 	collectionConfigMissing: (collection: string) =>
@@ -57,7 +52,12 @@ export function getEntrySlug({
 	collection,
 	slug,
 	unvalidatedSlug,
-}: EntryInfo & { unvalidatedSlug?: unknown }) {
+}: {
+	id: string;
+	collection: string;
+	slug: string;
+	unvalidatedSlug?: unknown;
+}) {
 	try {
 		return z.string().default(slug).parse(unvalidatedSlug);
 	} catch {
@@ -69,10 +69,15 @@ export function getEntrySlug({
 }
 
 export async function getEntryData(
-	entry: EntryInfo & { unvalidatedData: Record<string, unknown>; _internal: EntryInternal },
+	entry: {
+		id: string;
+		collection: string;
+		unvalidatedData: Record<string, unknown>;
+		_internal: EntryInternal;
+	},
 	collectionConfig: CollectionConfig,
 	pluginContext: PluginContext,
-	settings: AstroSettings
+	settings: Pick<AstroSettings, 'config'>
 ) {
 	let data;
 	if (collectionConfig.type === 'data') {
@@ -109,6 +114,8 @@ export async function getEntryData(
 				message: AstroErrorData.ContentSchemaContainsSlugError.message(entry.collection),
 			});
 		}
+
+		console.log(entry);
 
 		// Use `safeParseAsync` to allow async transforms
 		const parsed = await schema.safeParseAsync(entry.unvalidatedData, {
@@ -180,10 +187,10 @@ export function getContentEntryIdAndSlug({
 	entry,
 	contentDir,
 	collection,
-}: Pick<ContentPaths, 'contentDir'> & { entry: URL; collection: string }): Pick<
-	EntryInfo,
-	'id' | 'slug'
-> {
+}: Pick<ContentPaths, 'contentDir'> & { entry: URL; collection: string }): {
+	id: string;
+	slug: string;
+} {
 	const rawRelativePath = path.relative(fileURLToPath(contentDir), fileURLToPath(entry));
 	const rawId = path.relative(collection, rawRelativePath);
 	const rawIdWithoutFileExt = rawId.replace(new RegExp(path.extname(rawId) + '$'), '');
@@ -283,9 +290,14 @@ export const globalContentConfigObserver = contentObservable({ status: 'init' })
 // TODO: hoist to proper error
 const InvalidDataCollectionConfigError = {
 	...AstroErrorData.UnknownContentCollectionError,
-	message: (dataExtsStringified: string) =>
-		`Found a non-data collection with ${dataExtsStringified} files. To make this a data collection, use the \`defineDataCollection()\` helper or add \`type: 'data'\` to your collection config.`,
+	message: (dataExtsStringified: string, collection: string) =>
+		`Found a non-data collection with ${dataExtsStringified} files: **${collection}.** To make this a data collection, use the \`defineDataCollection()\` helper or add \`type: 'data'\` to your collection config.`,
 };
+
+export function hasContentFlag(viteId: string, flag: (typeof CONTENT_FLAGS)[number]) {
+	const flags = new URLSearchParams(viteId.split('?')[1]);
+	return flags.has(flag);
+}
 
 export async function loadContentConfig({
 	fs,
@@ -330,7 +342,8 @@ export async function loadContentConfig({
 				throw new AstroError({
 					...InvalidDataCollectionConfigError,
 					message: InvalidDataCollectionConfigError.message(
-						JSON.stringify(dataEntryExts.join(', '))
+						JSON.stringify(dataEntryExts.join(', ')),
+						collectionName
 					),
 				});
 			}
