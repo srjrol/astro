@@ -152,12 +152,9 @@ export function getDataEntryExts(settings: Pick<AstroSettings, 'dataEntryTypes'>
 	return settings.dataEntryTypes.map((t) => t.extensions).flat();
 }
 
-export function getEntryCollectionName({
-	contentDir,
-	entry,
-}: Pick<ContentPaths, 'contentDir'> & { entry: string | URL }) {
+export function getEntryCollectionName({ dir, entry }: { dir: URL; entry: string | URL }) {
 	const entryPath = typeof entry === 'string' ? entry : fileURLToPath(entry);
-	const rawRelativePath = path.relative(fileURLToPath(contentDir), entryPath);
+	const rawRelativePath = path.relative(fileURLToPath(dir), entryPath);
 	const collectionName = path.dirname(rawRelativePath).split(path.sep).shift() ?? '';
 	const isOutsideCollection =
 		collectionName === '' || collectionName === '..' || collectionName === '.';
@@ -171,10 +168,14 @@ export function getEntryCollectionName({
 
 export function getDataEntryId({
 	entry,
-	contentDir,
+	dataDir,
 	collection,
-}: Pick<ContentPaths, 'contentDir'> & { entry: URL; collection: string }): string {
-	const rawRelativePath = path.relative(fileURLToPath(contentDir), fileURLToPath(entry));
+}: {
+	dataDir: URL;
+	entry: URL;
+	collection: string;
+}): string {
+	const rawRelativePath = path.relative(fileURLToPath(dataDir), fileURLToPath(entry));
 	const rawId = path.relative(collection, rawRelativePath);
 	const rawIdWithoutFileExt = rawId.replace(new RegExp(path.extname(rawId) + '$'), '');
 
@@ -185,7 +186,11 @@ export function getContentEntryIdAndSlug({
 	entry,
 	contentDir,
 	collection,
-}: Pick<ContentPaths, 'contentDir'> & { entry: URL; collection: string }): {
+}: {
+	contentDir: URL;
+	entry: URL;
+	collection: string;
+}): {
 	id: string;
 	slug: string;
 } {
@@ -210,18 +215,26 @@ export function getContentEntryIdAndSlug({
 
 export function getEntryType(
 	entryPath: string,
-	paths: Pick<ContentPaths, 'config' | 'contentDir'>,
+	paths: Pick<ContentPaths, 'config' | 'contentDir' | 'dataDir'>,
 	contentFileExts: string[],
-	dataFileExts: string[]
+	dataFileExts: string[],
+	collectionDir?: 'content' | 'data'
 ): 'content' | 'data' | 'config' | 'ignored' | 'unsupported' {
 	const { ext, base } = path.parse(entryPath);
 	const fileUrl = pathToFileURL(entryPath);
 
-	if (hasUnderscoreBelowContentDirectoryPath(fileUrl, paths.contentDir) || isOnIgnoreList(base)) {
+	if (
+		collectionDir &&
+		(hasUnderscoreBelowDirectoryPath(
+			fileUrl,
+			collectionDir === 'content' ? paths.contentDir : paths.dataDir
+		) ||
+			isOnIgnoreList(base))
+	) {
 		return 'ignored';
-	} else if (contentFileExts.includes(ext)) {
+	} else if (contentFileExts.includes(ext) && collectionDir === 'content') {
 		return 'content';
-	} else if (dataFileExts.includes(ext)) {
+	} else if (dataFileExts.includes(ext) && collectionDir === 'data') {
 		return 'data';
 	} else if (fileUrl.href === paths.config.url.href) {
 		return 'config';
@@ -234,11 +247,8 @@ function isOnIgnoreList(fileName: string) {
 	return ['.DS_Store'].includes(fileName);
 }
 
-function hasUnderscoreBelowContentDirectoryPath(
-	fileUrl: URL,
-	contentDir: ContentPaths['contentDir']
-): boolean {
-	const parts = fileUrl.pathname.replace(contentDir.pathname, '').split('/');
+function hasUnderscoreBelowDirectoryPath(fileUrl: URL, dir: URL): boolean {
+	const parts = fileUrl.pathname.replace(dir.pathname, '').split('/');
 	for (const part of parts) {
 		if (part.startsWith('_')) return true;
 	}
@@ -289,7 +299,7 @@ export const globalContentConfigObserver = contentObservable({ status: 'init' })
 const InvalidDataCollectionConfigError = {
 	...AstroErrorData.UnknownContentCollectionError,
 	message: (dataExtsStringified: string, collection: string) =>
-		`Found a non-data collection with ${dataExtsStringified} files: **${collection}.** To make this a data collection, use the \`defineDataCollection()\` helper or add \`type: 'data'\` to your collection config.`,
+		`Found a non-data collection with ${dataExtsStringified} files: **${collection}.** To make this a data collection, 1) move to \`src/data/\`, and 2) use the \`defineDataCollection()\` helper or add \`type: 'data'\` to your collection config.`,
 };
 
 export function hasContentFlag(viteId: string, flag: (typeof CONTENT_FLAGS)[number]) {
@@ -322,7 +332,7 @@ export async function loadContentConfig({
 		// Check that data collections are properly configured using `defineDataCollection()`.
 		const dataEntryExts = getDataEntryExts(settings);
 
-		const collectionEntryGlob = await glob('**', {
+		const contentCollectionGlob = await glob('**', {
 			cwd: fileURLToPath(contentPaths.contentDir),
 			absolute: true,
 			fs: {
@@ -331,8 +341,8 @@ export async function loadContentConfig({
 			},
 		});
 
-		for (const entry of collectionEntryGlob) {
-			const collectionName = getEntryCollectionName({ contentDir: contentPaths.contentDir, entry });
+		for (const entry of contentCollectionGlob) {
+			const collectionName = getEntryCollectionName({ dir: contentPaths.contentDir, entry });
 			if (!collectionName || !config.data.collections[collectionName]) continue;
 
 			const { type } = config.data.collections[collectionName];
@@ -351,6 +361,18 @@ export async function loadContentConfig({
 	} else {
 		return undefined;
 	}
+}
+
+export function getCollectionDirByUrl(
+	url: URL,
+	contentPaths: Pick<ContentPaths, 'contentDir' | 'dataDir'>
+): 'content' | 'data' | undefined {
+	if (url.href.startsWith(contentPaths.contentDir.href)) {
+		return 'content';
+	} else if (url.href.startsWith(contentPaths.dataDir.href)) {
+		return 'data';
+	}
+	return undefined;
 }
 
 type ContentCtx =
@@ -394,6 +416,7 @@ export function contentObservable(initialCtx: ContentCtx): ContentObservable {
 
 export type ContentPaths = {
 	contentDir: URL;
+	dataDir: URL;
 	assetsDir: URL;
 	cacheDir: URL;
 	typesTemplate: URL;
@@ -414,6 +437,7 @@ export function getContentPaths(
 	return {
 		cacheDir: new URL('.astro/', root),
 		contentDir: new URL('./content/', srcDir),
+		dataDir: new URL('./data/', srcDir),
 		assetsDir: new URL('./assets/', srcDir),
 		typesTemplate: new URL('types.d.ts', templateDir),
 		virtualModTemplate: new URL('virtual-mod.mjs', templateDir),

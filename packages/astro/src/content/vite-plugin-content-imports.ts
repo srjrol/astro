@@ -83,7 +83,7 @@ export function astroContentImportPlugin({
 	const plugins: Plugin[] = [
 		{
 			name: 'astro:content-imports',
-			async transform(code, viteId) {
+			async transform(_, viteId) {
 				if (hasContentFlag(viteId, DATA_FLAG)) {
 					const fileId = viteId.split('?')[0];
 					// Data collections don't need to rely on the module cache.
@@ -253,7 +253,7 @@ export const _internal = {
 		});
 		const entry = pathToFileURL(fileId);
 		const { contentDir } = contentPaths;
-		const collection = getEntryCollectionName({ entry, contentDir });
+		const collection = getEntryCollectionName({ entry, dir: contentDir });
 		if (collection === undefined)
 			throw new AstroError(AstroErrorData.UnknownContentCollectionError);
 
@@ -344,7 +344,7 @@ async function getDataEntryModule({
 }: {
 	fs: typeof fsMod;
 	fileId: string;
-	contentPaths: Pick<ContentPaths, 'contentDir'>;
+	contentPaths: Pick<ContentPaths, 'dataDir'>;
 	pluginContext: PluginContext;
 	dataEntryExtToParser: Map<string, DataEntryType['getEntryInfo']>;
 	settings: Pick<AstroSettings, 'config'>;
@@ -367,11 +367,11 @@ async function getDataEntryModule({
 		contents: rawContents,
 	});
 	const entry = pathToFileURL(fileId);
-	const { contentDir } = contentPaths;
-	const collection = getEntryCollectionName({ entry, contentDir });
+	const { dataDir } = contentPaths;
+	const collection = getEntryCollectionName({ entry, dir: dataDir });
 	if (collection === undefined) throw new AstroError(AstroErrorData.UnknownContentCollectionError);
 
-	const id = getDataEntryId({ entry, contentDir, collection });
+	const id = getDataEntryId({ entry, dataDir, collection });
 
 	const _internal = { filePath: fileId, rawData: '' };
 
