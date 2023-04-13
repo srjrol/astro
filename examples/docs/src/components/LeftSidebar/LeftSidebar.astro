@@ -17,11 +17,11 @@ const sidebar = SIDEBAR[langCode];
 <nav aria-labelledby="grid-left">
 	<ul class="nav-groups">
 		{
-			Object.entries(sidebar).map(([header, children]) => (
+			Object.entries(sidebar).map(([header, children], index) => (
 				<li>
-					<div class="nav-group">
+					<div class="nav-group" data-index={index}>
 						<h2 class="nav-group-title">{header}</h2>
-						<ul>
+						<ul class="nav-group-children">
 							{children.map((child) => {
 								const url = Astro.site?.pathname + child.link;
 								return (
@@ -41,7 +41,18 @@ const sidebar = SIDEBAR[langCode];
 </nav>
 
 <script is:inline>
-	window.addEventListener('DOMContentLoaded', () => {
+	document.addEventListener('DOMContentLoaded', () => {
+		const navGroups = document.querySelectorAll('.nav-group');
+
+		navGroups.forEach((navGroup) => {
+			const title = navGroup.querySelector('.nav-group-title');
+			const children = navGroup.querySelector('.nav-group-children');
+
+			title.addEventListener('click', () => {
+				children.classList.toggle('hidden');
+			});
+		});
+
 		var target = document.querySelector('[aria-current="page"]');
 		if (target && target.offsetTop > window.innerHeight - 100) {
 			document.querySelector('.nav-groups').scrollTop = target.offsetTop;
@@ -67,13 +78,16 @@ const sidebar = SIDEBAR[langCode];
 		margin-top: 2rem;
 	}
 
-	.nav-groups > :first-child {
-		padding-top: var(--doc-padding);
+	.nav-group-children {
+		display: block;
 	}
 
-	.nav-groups > :last-child {
-		padding-bottom: 2rem;
-		margin-bottom: var(--theme-navbar-height);
+	.nav-group-children.hidden {
+		display: none;
+	}
+
+	.nav-group-children.collapsed {
+		display: block;
 	}
 
 	.nav-group-title {
@@ -82,6 +96,7 @@ const sidebar = SIDEBAR[langCode];
 		padding: 0.1rem 1rem;
 		text-transform: uppercase;
 		margin-bottom: 0.5rem;
+		cursor: pointer;
 	}
 
 	.nav-link a {
